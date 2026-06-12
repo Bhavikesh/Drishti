@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import NetworkPage from './pages/NetworkPage';
 import AuditPage from './pages/AuditPage';
 import Chat from './components/Chat';
+import DetectiveBoard from './components/DetectiveBoard';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode, requiredRole?: string }> = ({ children, requiredRole }) => {
   const { user, loading, hasPermission } = useAuthContext();
@@ -24,20 +25,25 @@ const Navigation: React.FC = () => {
 
   return (
     <nav className="bg-gray-800 p-4 text-white flex justify-between items-center h-16 border-b border-gray-700">
-      <div className="flex space-x-6">
-        <span className="font-bold text-xl text-blue-500">DRISHTI</span>
-        <Link to="/dashboard" className="hover:text-blue-400">Dashboard</Link>
-        <Link to="/chat" className="hover:text-blue-400">Chat</Link>
+      <div className="flex space-x-6 items-center">
+        <span className="font-bold text-xl bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+          🔍 CRIMEMIND AI
+        </span>
+        <Link to="/dashboard" className="hover:text-blue-400 transition-colors">Dashboard</Link>
+        <Link to="/chat" className="hover:text-blue-400 transition-colors">Chat</Link>
         {user.role !== 'constable' && (
-          <Link to="/network" className="hover:text-blue-400">Network</Link>
+          <>
+            <Link to="/investigate" className="hover:text-red-400 transition-colors" style={{ color: '#e74c3c', fontWeight: 600 }}>🕵️ Investigate</Link>
+            <Link to="/network" className="hover:text-blue-400 transition-colors">Network</Link>
+          </>
         )}
         {user.role === 'admin' && (
-          <Link to="/audit" className="hover:text-blue-400">Audit Logs</Link>
+          <Link to="/audit" className="hover:text-blue-400 transition-colors">Audit Logs</Link>
         )}
       </div>
       <div className="flex items-center space-x-4">
         <span className="text-sm text-gray-400">{user.email} ({user.role})</span>
-        <button onClick={logout} className="px-3 py-1 bg-red-600 rounded hover:bg-red-700 text-sm">Logout</button>
+        <button onClick={logout} className="px-3 py-1 bg-red-600 rounded hover:bg-red-700 text-sm transition-colors">Logout</button>
       </div>
     </nav>
   );
@@ -51,6 +57,7 @@ const AppContent: React.FC = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+        <Route path="/investigate" element={<ProtectedRoute requiredRole="inspector"><DetectiveBoard /></ProtectedRoute>} />
         <Route path="/network" element={<ProtectedRoute requiredRole="inspector"><NetworkPage /></ProtectedRoute>} />
         <Route path="/audit" element={<ProtectedRoute requiredRole="admin"><AuditPage /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/dashboard" />} />

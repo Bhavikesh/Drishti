@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from schemas.user_schema import UserLogin, UserCreate, UserResponse, TokenData
 import os
 import hashlib
+from database import get_db_connection
 
 router = APIRouter()
 
@@ -19,19 +20,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password using SHA256"""
     return hash_password(plain_password) == hashed_password
 
-# Mock database for hackathon
-# Password: Admin@123 (hashed with SHA256)
-users_db = {
-    "admin@ksp.gov.in": {
-        "id": 1,
-        "email": "admin@ksp.gov.in",
-        "password_hash": "e86f78a8a3caf0b60d8e74e5942aa6d86dc150cd3c03338aef25b7d2d7e3acc7",  # Admin@123
-        "role": "admin",
-        "assigned_district": None,
-        "assigned_station_id": None
-    }
-}
-
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     if expires_delta:
@@ -44,15 +32,38 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 
 @router.post("/login", response_model=TokenData)
 async def login(user_data: UserLogin):
-    user = users_db.get(user_data.email)
-    if not user or not verify_password(user_data.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    print(f"Login attempt for: {user_data.email}")
+    conn = get_db_connection()
+    if not conn:
+        print("Login failed: Could not connect to database")
+        raise HTTPException(status_code=500, detail="Database connection error")
         
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": str(user["id"]), "role": user["role"]}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id, email, password_hash, role FROM users WHERE email = %s", (user_data.email,))
+        user_record = cur.fetchone()
+        
+        if not user_record:
+            print("Login failed: User not found in database")
+            raise HTTPException(status_code=401, detail="Incorrect email or password")
+            
+        print(f"User found. Expected hash: {user_record[2]}")
+        print(f"Provided hash: {hash_password(user_data.password)}")
+            
+        if not verify_password(user_data.password, user_record[2]):
+            print("Login failed: Password hash mismatch")
+            raise HTTPException(status_code=401, detail="Incorrect email or password")
+            
+        print("Login successful!")
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": str(user_record[0]), "role": user_record[3]}, 
+            expires_delta=access_token_expires
+        )
+        return {"access_token": access_token, "token_type": "bearer"}
+    finally:
+        cur.close()
+        conn.close()
 
 @router.post("/register")
 async def register(request: Request, user_data: UserCreate):
@@ -61,21 +72,26 @@ async def register(request: Request, user_data: UserCreate):
     if not current_user or current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Not authorized")
         
-    if user_data.email in users_db:
-        raise HTTPException(status_code=400, detail="Email already registered")
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection error")
         
-    # Generate mock ID
-    new_id = len(users_db) + 1
-    users_db[user_data.email] = {
-        "id": new_id,
-        "email": user_data.email,
-        "password_hash": hash_password(user_data.password),
-        "role": user_data.role,
-        "assigned_district": user_data.assigned_district,
-        "assigned_station_id": user_data.assigned_station_id
-    }
-    
-    return {"message": "User registered successfully"}
+    try:
+        cur = conn.cursor()
+        # Check if exists
+        cur.execute("SELECT id FROM users WHERE email = %s", (user_data.email,))
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail="Email already registered")
+            
+        cur.execute(
+            "INSERT INTO users (email, password_hash, role, assigned_district, assigned_station_id) VALUES (%s, %s, %s, %s, %s)",
+            (user_data.email, hash_password(user_data.password), user_data.role, user_data.assigned_district, user_data.assigned_station_id)
+        )
+        conn.commit()
+        return {"message": "User registered successfully"}
+    finally:
+        cur.close()
+        conn.close()
 
 @router.get("/me", response_model=UserResponse)
 async def me(request: Request):
@@ -83,12 +99,28 @@ async def me(request: Request):
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
         
-    # Find user in mock db
-    for email, user in users_db.items():
-        if str(user["id"]) == current_user["id"]:
-            return user
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection error")
+        
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id, email, role, assigned_district, assigned_station_id FROM users WHERE id = %s", (current_user["id"],))
+        user_record = cur.fetchone()
+        
+        if not user_record:
+            raise HTTPException(status_code=404, detail="User not found")
             
-    raise HTTPException(status_code=404, detail="User not found")
+        return {
+            "id": user_record[0],
+            "email": user_record[1],
+            "role": user_record[2],
+            "assigned_district": user_record[3],
+            "assigned_station_id": user_record[4]
+        }
+    finally:
+        cur.close()
+        conn.close()
 
 @router.get("/verify")
 async def verify(request: Request):

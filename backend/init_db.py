@@ -9,11 +9,8 @@ def init_database():
         
     cur = conn.cursor()
     
-    # 1. Database Schema
+    # Database Schema (no PostGIS - not supported on Supabase free tier)
     schema = """
-    -- Enable PostGIS for geospatial queries
-    CREATE EXTENSION IF NOT EXISTS postgis;
-
     CREATE TABLE IF NOT EXISTS police_stations (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100),
@@ -44,6 +41,8 @@ def init_database():
         name VARCHAR(100),
         age INTEGER,
         gender VARCHAR(10),
+        phone VARCHAR(20),
+        address TEXT,
         criminal_history_count INTEGER DEFAULT 0,
         is_repeat_offender BOOLEAN,
         first_offense_date DATE
@@ -78,10 +77,9 @@ def init_database():
     try:
         cur.execute(schema)
         
-        # 2. Insert default admin
-        from passlib.context import CryptContext
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        admin_hash = pwd_context.hash("Admin@123")
+        # Insert default admin user (SHA256 hash to match auth.py)
+        import hashlib
+        admin_hash = hashlib.sha256("Admin@123".encode()).hexdigest()
         
         cur.execute(
             "INSERT INTO users (email, password_hash, role) VALUES (%s, %s, %s) ON CONFLICT (email) DO NOTHING",
@@ -89,7 +87,7 @@ def init_database():
         )
         
         conn.commit()
-        print("Database initialized successfully.")
+        print("✅ Database initialized successfully on Supabase!")
     except Exception as e:
         print(f"Error initializing database: {e}")
         conn.rollback()

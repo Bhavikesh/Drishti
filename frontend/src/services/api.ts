@@ -33,8 +33,12 @@ export const chatAPI = {
 };
 
 export const networkAPI = {
-  getGraph: async (crimeId?: number, criminalName?: string) => {
-    const response = await api.post('/network/graph', { crime_id: crimeId, criminal_name: criminalName });
+  getGraph: async (crimeId?: number, criminalName?: string, district?: string) => {
+    const response = await api.post('/network/graph', {
+      crime_id: crimeId,
+      criminal_name: criminalName,
+      district: district
+    });
     return response.data;
   }
 };
@@ -51,20 +55,37 @@ export const predictionsAPI = {
   getAlerts: async () => {
     const response = await api.get('/predictions/alerts');
     return response.data;
+  },
+  getStats: async () => {
+    const response = await api.get('/predictions/stats');
+    return response.data;
   }
 };
 
 export const exportAPI = {
-  generatePDF: async (chatHistory: any[], userId: number, role: string) => {
-    const response = await api.post('/export/pdf', { chat_history: chatHistory, user_id: userId, role }, { responseType: 'blob' });
+  generatePDF: async (chatHistory: any[], userId: number, role: string, title: string = "Investigation Report") => {
+    const response = await api.post('/export/pdf', {
+      chat_history: chatHistory,
+      user_id: userId,
+      role,
+      title
+    }, { responseType: 'blob' });
     
     // Auto download
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', 'drishti_report.pdf');
+    const timestamp = new Date().toISOString().slice(0, 10);
+    link.setAttribute('download', `crimemind_report_${timestamp}.pdf`);
     document.body.appendChild(link);
     link.click();
     link.remove();
+  }
+};
+
+export const investigationAPI = {
+  getBoard: async (query: string) => {
+    const response = await api.post('/investigation/board', { query });
+    return response.data;
   }
 };

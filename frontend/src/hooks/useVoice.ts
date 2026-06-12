@@ -62,6 +62,13 @@ export const useVoice = () => {
     window.speechSynthesis.speak(utterance);
   };
 
+  const stopSpeech = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
+  };
+
   return {
     isListening,
     isSpeaking,
@@ -69,6 +76,7 @@ export const useVoice = () => {
     error,
     startListening,
     stopListening,
-    speak
+    speak,
+    stopSpeech
   };
 };

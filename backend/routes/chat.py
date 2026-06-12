@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
-import mistral_client
-import rag_pipeline
+import langgraph_router
 import translation
 from utils import session_manager, audit_logger
 
@@ -24,37 +23,36 @@ async def chat_endpoint(request: Request, body: ChatRequest):
     session_manager.add_message(body.session_id, "user", english_query)
     context = session_manager.get_context(body.session_id)
     
-    # 3. RAG Retrieval
+    # 3. Route through LangGraph multi-agent system
     try:
-        rag_results = rag_pipeline.retrieve_relevant_crimes(english_query)
-        # Format sources from rag_results for mistral
-        sources_text = "\n".join([doc for doclist in rag_results['documents'] for doc in doclist]) if rag_results and 'documents' in rag_results else ""
+        result = langgraph_router.route_query(english_query, context)
+        ai_response = result.get("response", "I couldn't process your request.")
     except Exception as e:
-        sources_text = ""
-        rag_results = []
+        import traceback
+        print(f"LangGraph error: {e}")
+        traceback.print_exc()
+        ai_response = "I'm sorry, I couldn't process your request at this time."
+        result = {"sources": [], "confidence": 0.5, "agent": "ERROR"}
         
-    # 4. Query Mistral
-    prompt = f"Context: {sources_text}\n\nChat History: {context}\n\nUser Query: {english_query}"
-    system_prompt = "You are Drishti, an AI assistant for Karnataka State Police. Answer crime-related queries using only provided data. Be concise and professional."
+    session_manager.add_message(body.session_id, "assistant", ai_response)
     
-    try:
-        mistral_response = mistral_client.query_mistral(prompt, system_prompt)
-    except Exception as e:
-        mistral_response = "I'm sorry, I couldn't process your request at this time."
-        
-    session_manager.add_message(body.session_id, "assistant", mistral_response)
-    
-    # 5. Translate back if needed
+    # 4. Translate back if needed
     if body.language.startswith("kn") or translation.detect_language(body.message) == "kn":
-        final_response = translation.translate_to_kannada(mistral_response)
+        final_response = translation.translate_to_kannada(ai_response)
     else:
-        final_response = mistral_response
+        final_response = ai_response
         
-    # 6. Audit Logging
+    # 5. Audit Logging
     await audit_logger.log_audit(user_id, body.message, final_response, ip_address, body.session_id)
     
     return {
         "response": final_response,
-        "sources": rag_results.get('metadatas', []) if isinstance(rag_results, dict) else [],
-        "confidence": 0.95  # Mock confidence
+        "sources": result.get("sources", []),
+        "confidence": result.get("confidence", 0.85),
+        "agent": result.get("agent", "DATABASE"),
+        "stats": result.get("stats", None),
+        "network_data": result.get("network_data", None),
+        "prediction_data": result.get("prediction_data", None),
+        "sql_results": result.get("sql_results", None),
+        "investigate_query": english_query, # Suggest this for the detective board
     }

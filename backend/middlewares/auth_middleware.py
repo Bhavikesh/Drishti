@@ -7,7 +7,7 @@ import os
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-for-hackathon")
 ALGORITHM = "HS256"
 
-PUBLIC_PATHS = ["/api/auth/login", "/api/auth/register", "/docs", "/openapi.json"]
+PUBLIC_PATHS = ["/", "/api/auth/login", "/api/auth/register", "/docs", "/openapi.json", "/api/predictions/stats"]
 
 async def auth_middleware(request: Request, call_next: Callable):
     if request.url.path in PUBLIC_PATHS or request.method == "OPTIONS":
