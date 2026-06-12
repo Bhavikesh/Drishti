@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from main import app
-from routes.auth import pwd_context, users_db
+from routes.auth import hash_password, verify_password, users_db
 
 client = TestClient(app)
 
@@ -193,11 +193,11 @@ def admin_token():
 def test_password_hashing():
     """Test that passwords are properly hashed"""
     password = "TestPassword123"
-    hashed = pwd_context.hash(password)
+    hashed = hash_password(password)
     
     # Hash should be different from original
     assert hashed != password
     # Should be able to verify
-    assert pwd_context.verify(password, hashed)
+    assert verify_password(password, hashed)
     # Wrong password should fail
-    assert not pwd_context.verify("WrongPassword", hashed)
+    assert not verify_password("WrongPassword", hashed)
