@@ -27,6 +27,7 @@ const DashboardPage: React.FC = () => {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({});
   const [explanation, setExplanation] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -54,11 +55,41 @@ const DashboardPage: React.FC = () => {
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
         setAlerts(FALLBACK_ALERTS);
+      } finally {
+        setLoading(false);
       }
     };
     
     fetchData();
   }, []);
+
+  if (loading) {
+    return (
+      <div className="p-6 bg-gray-900 min-h-screen text-white animate-pulse">
+        <div className="h-10 bg-gray-800 rounded w-1/3 mb-4"></div>
+        <div className="h-4 bg-gray-800 rounded w-1/4 mb-8"></div>
+        
+        {/* Brief Skeleton */}
+        <div className="h-32 bg-gray-800 rounded-xl mb-8"></div>
+        
+        {/* Stats Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-gray-800 h-24 rounded-lg shadow"></div>
+          ))}
+        </div>
+        
+        {/* Main Content Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-gray-800 h-80 rounded-lg shadow"></div>
+          <div className="space-y-6">
+            <div className="bg-gray-800 h-48 rounded-lg shadow"></div>
+            <div className="bg-gray-800 h-48 rounded-lg shadow"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 bg-gray-900 min-h-screen text-white">
