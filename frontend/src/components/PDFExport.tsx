@@ -25,7 +25,6 @@ const PDFExport: React.FC<Props> = ({ chatHistory }) => {
     // Parse AI response for structured content
     const lines = lastResponse.split('\n').filter((l: string) => l.trim());
     const bulletPoints = lines.filter((l: string) => l.trim().startsWith('•') || l.trim().startsWith('-'));
-    const boldSections = lastResponse.match(/\*\*(.*?)\*\*/g)?.map((s: string) => s.replace(/\*\*/g, '')) || [];
 
     const htmlContent = `
 <!DOCTYPE html>
