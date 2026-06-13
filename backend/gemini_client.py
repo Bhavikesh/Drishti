@@ -1,130 +1,123 @@
 """
-Gemini 2.0 Flash client for CrimeMind AI
-With automatic retry on rate limits
+AI Client for CrimeMind AI (Switched to Groq for Hackathon Speed & Reliability)
+We keep the filename 'gemini_client.py' to avoid breaking imports elsewhere.
 """
 import os
 import json
-import time
 import traceback
+import requests
+from pathlib import Path
 from dotenv import load_dotenv
-from google import genai
 
-load_dotenv(override=True)
+# Always load .env from the same directory as this file
+_env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(_env_path, override=True)
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# Initialize the Gemini client
-client = None
-if GEMINI_API_KEY:
-    try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        print(f"✅ Gemini client initialized (key ends with ...{GEMINI_API_KEY[-6:]})")
-    except Exception as e:
-        print(f"❌ Gemini client init failed: {e}")
+if GROQ_API_KEY:
+    print(f"✅ Groq client initialized (key ends with ...{GROQ_API_KEY[-6:]})")
 else:
-    print("⚠️ GEMINI_API_KEY not set!")
+    print("⚠️ GROQ_API_KEY not set!")
 
-SYSTEM_PROMPT = """You are CrimeMind AI, an intelligent crime investigation copilot for Karnataka State Police.
+SYSTEM_PROMPT = """You are a Crime Intelligence Officer. You are NOT a generic AI assistant. You DO NOT write essays, introductions, or generic explanations.
 
-Your role:
-- Analyze crime data and provide actionable intelligence
-- Identify patterns, networks, and hotspots
-- Provide explainable recommendations backed by data
-- Be professional, concise, and accurate
-- When presenting analysis, use structured formats with bullet points
-- Always cite specific numbers and statistics from the provided data
-- Suggest recommended actions for law enforcement
+Every answer MUST strictly follow this exact 4-part structure:
 
-When providing investigation summaries, structure your response as:
-**Summary:** Brief overview of findings
-**Key Statistics:** Bullet points with specific numbers
-**Identified Patterns:** Any trends or patterns detected
-**Repeat Offenders:** Named individuals with crime counts (if applicable)
-**Recommended Actions:** Specific actionable recommendations
+1. Direct Answer
+Provide the immediate answer to the query (e.g., top offenders, hotspots).
+2. Evidence
+List the supporting data from the database (e.g., Linked Cases, Connected Suspects).
+3. Analysis
+Provide one key insight (e.g., Network Influence, Confidence Score).
+4. Recommendation
+Give one specific tactical recommendation for law enforcement.
 
-Never fabricate data. Only use information provided in the context."""
+DO NOT use conversational filler like "Here is the information you requested" or "Crime is a serious issue".
+DO NOT hallucinate data. If the data is not in the provided SQL results or RAG context, say "Insufficient data in intelligence database."
+Always format with clear headings and bullet points."""
 
-
-def _call_gemini_with_retry(model, contents, config, max_retries=3):
-    """Wrapper that retries on 429 rate limit errors with exponential backoff."""
-    for attempt in range(max_retries):
-        try:
-            response = client.models.generate_content(
-                model=model,
-                contents=contents,
-                config=config,
-            )
-            return response
-        except Exception as e:
-            error_str = str(e)
-            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                wait_time = 2 * (attempt + 1)  # Reduce wait time to 2s, 4s, 6s so UI doesn't freeze forever
-                print(f"⏳ Rate limited (attempt {attempt+1}/{max_retries}). Waiting {wait_time}s...")
-                time.sleep(wait_time)
-            else:
-                raise e
-    raise Exception("Max retries exceeded for Gemini API")
-
+def _call_groq(prompt: str, system_prompt: str = None, json_mode: bool = False, model="llama-3.3-70b-versatile", temperature=0.7, max_tokens=1500) -> str:
+    """Wrapper to call Groq's REST API natively to avoid sandbox/dependency issues"""
+    if not GROQ_API_KEY:
+        raise Exception("GROQ_API_KEY is not set.")
+        
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+    
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens
+    }
+    
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+        
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
+        if response.status_code != 200:
+            raise Exception(f"Groq API returned {response.status_code}: {response.text}")
+            
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+    except Exception as e:
+        print(f"🔴 Groq API error: {str(e)[:300]}")
+        raise e
 
 def query_gemini(prompt: str, system_prompt: str = None) -> str:
-    """Query Gemini 2.0 Flash with the given prompt"""
-    if not client:
-        print("Warning: Gemini client not available. Using mock response.")
-        return f"[Mock Response] I received your query: {prompt[:100]}..."
-
+    """Query Groq (Llama 3 70B) with the given prompt"""
     final_system = system_prompt or SYSTEM_PROMPT
 
     try:
-        response = _call_gemini_with_retry(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=genai.types.GenerateContentConfig(
-                system_instruction=final_system,
-                temperature=0.7,
-                max_output_tokens=1500,
-            ),
+        response_text = _call_groq(
+            prompt=prompt,
+            system_prompt=final_system,
+            json_mode=False,
+            model="llama-3.3-70b-versatile",
+            temperature=0.7
         )
-        if response and response.text:
-            return response.text
+        if response_text:
+            return response_text
         else:
-            print(f"⚠️ Gemini returned empty response. Candidates: {response.candidates if response else 'None'}")
+            print("⚠️ Groq returned empty response.")
             return "The AI could not generate a response for this query. Please rephrase."
     except Exception as e:
-        print(f"✗ Gemini API error in query_gemini: {e}")
+        print(f"✗ Groq API error in query_gemini: {e}")
         traceback.print_exc()
         return "I apologize, but I'm having trouble processing your request right now. Please try again."
 
-
 def query_gemini_json(prompt: str, system_prompt: str = None) -> dict:
-    """Query Gemini and parse structured JSON response"""
-    if not client:
-        return {"error": "GEMINI_API_KEY not set"}
-
+    """Query Groq and parse structured JSON response"""
     final_system = (system_prompt or SYSTEM_PROMPT) + "\n\nIMPORTANT: Respond ONLY with valid JSON. No markdown, no code fences, no extra text."
 
     try:
-        response = _call_gemini_with_retry(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=genai.types.GenerateContentConfig(
-                system_instruction=final_system,
-                temperature=0.3,
-                max_output_tokens=2000,
-                response_mime_type="application/json",
-            ),
+        response_text = _call_groq(
+            prompt=prompt,
+            system_prompt=final_system,
+            json_mode=True,
+            model="llama-3.1-8b-instant", # Faster for JSON extraction
+            temperature=0.1
         )
-        return json.loads(response.text)
+        return json.loads(response_text)
     except json.JSONDecodeError:
-        # If JSON parsing fails, return the raw text wrapped
-        return {"response": response.text if response else "No response"}
+        return {"error": "Invalid JSON response from Groq"}
     except Exception as e:
-        print(f"✗ Gemini JSON API error: {e}")
+        print(f"✗ Groq JSON API error: {e}")
         traceback.print_exc()
         return {"error": str(e)}
 
-
 def classify_intent(query: str) -> str:
-    """Use Gemini to classify user query intent for routing"""
+    """Use Groq to classify user query intent for routing"""
     classification_prompt = f"""Classify the following user query into exactly ONE category.
 
 Categories:
@@ -137,34 +130,31 @@ User Query: "{query}"
 
 Respond with ONLY the category name (DATABASE, NETWORK, PREDICTION, or REPORT). Nothing else."""
 
-    if not client:
-        return "DATABASE"
-
     try:
-        response = _call_gemini_with_retry(
-            model="gemini-2.0-flash",
-            contents=classification_prompt,
-            config=genai.types.GenerateContentConfig(
-                temperature=0.1,
-                max_output_tokens=20,
-            ),
+        response_text = _call_groq(
+            prompt=classification_prompt,
+            system_prompt="You are a strict classifier.",
+            json_mode=False,
+            model="llama-3.1-8b-instant",
+            temperature=0.0,
+            max_tokens=10
         )
-        intent = response.text.strip().upper()
-        if intent in ["DATABASE", "NETWORK", "PREDICTION", "REPORT"]:
-            return intent
+        intent = response_text.strip().upper()
+        # Clean up any quotes or extra text
+        for valid in ["DATABASE", "NETWORK", "PREDICTION", "REPORT"]:
+            if valid in intent:
+                return valid
         return "DATABASE"  # fallback
     except Exception as e:
         print(f"✗ classify_intent error, using heuristic fallback: {e}")
-        # Heuristic fallback
         ql = query.lower()
         if any(w in ql for w in ['predict', 'forecast', 'future', 'trend', 'hotspot']): return "PREDICTION"
         if any(w in ql for w in ['network', 'gang', 'associate', 'connection', 'link', 'shared']): return "NETWORK"
         if any(w in ql for w in ['report', 'summary', 'brief']): return "REPORT"
         return "DATABASE"
 
-
 def extract_query_parameters(query: str) -> dict:
-    """Use Gemini to map a query to a specific analytic tool and extract entities."""
+    """Use Groq to map a query to a specific analytic tool and extract entities."""
     prompt = f"""Extract parameters for crime analysis tools from the query.
 Available Tools:
 1. TOP_OFFENDERS_BY_CRIME: "Who committed the most murders?", "Top cybercrime offenders"
@@ -185,30 +175,23 @@ Analyze the query and respond ONLY with JSON containing:
   "fallback_sql": "string or null (ONLY if tool is GENERAL_SQL_FALLBACK, write a safe PostgreSQL SELECT query matching the schema: crimes(id, case_id, crime_date, district, police_station_id, crime_type, description, status, lat, lng, is_resolved, resolution_date), criminals(id, name, age, gender, phone, address, criminal_history_count, is_repeat_offender, first_offense_date), crime_criminal_links(id, crime_id, criminal_id, role))"
 }}"""
 
-    if not client:
-        return {"tool": "RAG_SEARCH"}
-        
     try:
-        response = _call_gemini_with_retry(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=genai.types.GenerateContentConfig(
-                temperature=0.1,
-                max_output_tokens=500,
-                response_mime_type="application/json",
-            ),
+        response_text = _call_groq(
+            prompt=prompt,
+            system_prompt="You are a JSON extractor.",
+            json_mode=True,
+            model="llama-3.1-8b-instant",
+            temperature=0.0
         )
-        return json.loads(response.text)
+        return json.loads(response_text)
     except Exception as e:
         print(f"✗ extract_query_parameters error, using heuristic fallback: {e}")
-        # Heuristic fallback
         ql = query.lower()
         tool = "RAG_SEARCH"
         if 'top' in ql or 'most' in ql: tool = "TOP_OFFENDERS_BY_CRIME"
         elif 'gang' in ql or 'network' in ql: tool = "GANG_SEARCH"
         elif 'phone' in ql or 'number' in ql or 'call' in ql: tool = "SHARED_PHONE_NETWORK"
         
-        # Very simple extraction
         crime_type = None
         for ct in ['murder', 'theft', 'burglary', 'robbery', 'fraud', 'cyber', 'drug', 'assault']:
             if ct in ql: crime_type = ct.title()

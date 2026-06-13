@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-ro
 import { AuthProvider, useAuthContext } from './contexts/AuthContext';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
-import NetworkPage from './pages/NetworkPage';
 import AuditPage from './pages/AuditPage';
 import Chat from './components/Chat';
 import DetectiveBoard from './components/DetectiveBoard';
@@ -26,15 +25,14 @@ const Navigation: React.FC = () => {
   return (
     <nav className="bg-gray-800 p-4 text-white flex justify-between items-center h-16 border-b border-gray-700">
       <div className="flex space-x-6 items-center">
-        <span className="font-bold text-xl bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-          🔍 CRIMEMIND AI
-        </span>
+        <div className="flex items-center gap-2 font-bold text-xl tracking-wider text-blue-400">
+          🔍 DRISHTI
+        </div>
         <Link to="/dashboard" className="hover:text-blue-400 transition-colors">Dashboard</Link>
         <Link to="/chat" className="hover:text-blue-400 transition-colors">Chat</Link>
         {user.role !== 'constable' && (
           <>
             <Link to="/investigate" className="hover:text-red-400 transition-colors" style={{ color: '#e74c3c', fontWeight: 600 }}>🕵️ Investigate</Link>
-            <Link to="/network" className="hover:text-blue-400 transition-colors">Network</Link>
           </>
         )}
         {user.role === 'admin' && (
@@ -58,7 +56,6 @@ const AppContent: React.FC = () => {
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
         <Route path="/investigate" element={<ProtectedRoute requiredRole="inspector"><DetectiveBoard /></ProtectedRoute>} />
-        <Route path="/network" element={<ProtectedRoute requiredRole="inspector"><NetworkPage /></ProtectedRoute>} />
         <Route path="/audit" element={<ProtectedRoute requiredRole="admin"><AuditPage /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/dashboard" />} />
       </Routes>

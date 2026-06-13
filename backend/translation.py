@@ -22,7 +22,7 @@ def translate_to_english(text):
         "q": text
     }
     try:
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params, timeout=5)
         return response.json()[0][0][0]
     except Exception as e:
         print(f"Translation error: {e}")
@@ -38,7 +38,7 @@ def translate_to_kannada(text):
         "q": text
     }
     try:
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params, timeout=5)
         return response.json()[0][0][0]
     except Exception as e:
         print(f"Translation error: {e}")

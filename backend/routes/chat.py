@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 import langgraph_router
 import translation
@@ -12,7 +12,7 @@ class ChatRequest(BaseModel):
     language: str = "en"
 
 @router.post("/")
-async def chat_endpoint(request: Request, body: ChatRequest):
+async def chat_endpoint(request: Request, body: ChatRequest, background_tasks: BackgroundTasks):
     user_id = getattr(request.state, "user", {}).get("id", 0)
     ip_address = request.client.host
     
@@ -42,8 +42,8 @@ async def chat_endpoint(request: Request, body: ChatRequest):
     else:
         final_response = ai_response
         
-    # 5. Audit Logging
-    await audit_logger.log_audit(user_id, body.message, final_response, ip_address, body.session_id)
+    # 5. Audit Logging in Background
+    background_tasks.add_task(audit_logger.log_audit, user_id, body.message, final_response, ip_address, body.session_id)
     
     return {
         "response": final_response,

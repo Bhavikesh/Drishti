@@ -73,7 +73,25 @@ async def build_investigation_board(body: InvestigateRequest):
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-        # 1. Find matching crimes
+        # 1. Determine if this is a direct name search
+        # If the query contains analytical words, it's a broad network search, not a name
+        analytical_keywords = ['repeat offenders', 'communication', 'hotspots', 'connected', 'network', 'gang', 'which', 'who', 'identify']
+        is_analytical = any(kw in query.lower() for kw in analytical_keywords)
+        
+        suspect_name = query.strip() if not crime_type and not district and not is_analytical and len(query.strip()) > 2 else None
+        matched_crime_ids = []
+
+        if suspect_name:
+            # Find all crimes this specific suspect is linked to
+            cur.execute("""
+                SELECT ccl.crime_id
+                FROM criminals c
+                JOIN crime_criminal_links ccl ON c.id = ccl.criminal_id
+                WHERE LOWER(c.name) LIKE LOWER(%s)
+            """, (f"%{suspect_name}%",))
+            matched_crime_ids = [r['crime_id'] for r in cur.fetchall()]
+
+        # 2. Find matching crimes
         crime_sql = """
             SELECT cr.id, cr.case_id, cr.crime_type, cr.district, cr.description,
                    cr.crime_date::text, cr.status, cr.lat, cr.lng,
@@ -89,11 +107,20 @@ async def build_investigation_board(body: InvestigateRequest):
         if district:
             crime_sql += " AND LOWER(cr.district) LIKE LOWER(%s)"
             crime_params.append(f"%{district}%")
+        if matched_crime_ids:
+            crime_sql += " AND cr.id = ANY(%s)"
+            crime_params.append(matched_crime_ids)
+        elif suspect_name and not matched_crime_ids:
+            # If they searched a name but it didn't exist, force no results instead of random ones
+            crime_sql += " AND 1=0"
+
         crime_sql += " ORDER BY cr.crime_date DESC LIMIT 15"
         cur.execute(crime_sql, tuple(crime_params))
         crimes = [dict(r) for r in cur.fetchall()]
 
-        if not crimes:
+        # Only pull random fallback crimes if the user didn't explicitly search for anything specific
+        is_generic_search = not crime_type and not district and not suspect_name
+        if not crimes and is_generic_search:
             cur.execute("""
                 SELECT cr.id, cr.case_id, cr.crime_type, cr.district, cr.description,
                        cr.crime_date::text, cr.status, cr.lat, cr.lng,

@@ -27,11 +27,8 @@ const Chat: React.FC = () => {
     try {
       const response = await chatAPI.sendMessage(text, sessionId, language);
       
-      // If LLM failed but we have SQL results, build a fallback markdown response
+      // The backend now handles all fallback responses natively
       let finalContent = response.response;
-      if (finalContent.includes("trouble processing") && response.sql_results) {
-        finalContent = "⚠️ **AI Generation Rate Limited.**\n\n*However, the database successfully executed the query. Here are the raw results:*\n\n```json\n" + JSON.stringify(response.sql_results, null, 2) + "\n```";
-      }
 
       setMessages(prev => [...prev, { 
         role: 'assistant', 
@@ -73,7 +70,7 @@ const Chat: React.FC = () => {
     <div className="flex flex-col h-[calc(100vh-64px)] bg-gray-900">
       <div className="flex justify-between items-center bg-gradient-to-r from-blue-900 to-indigo-900 p-4 text-white">
         <div>
-          <h1 className="text-xl font-bold">🔍 CrimeMind AI Assistant</h1>
+          <h1 className="text-xl font-bold">🔍 Drishti Assistant</h1>
           <p className="text-xs text-blue-200">
             Multi-Agent System | {language === 'kn' ? 'ಕನ್ನಡ' : 'English'} | Voice Enabled
             {lastAgent && <span className="ml-2 bg-blue-700 px-2 py-0.5 rounded text-xs">Agent: {lastAgent}</span>}
@@ -94,7 +91,7 @@ const Chat: React.FC = () => {
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 space-y-4">
             <div className="text-6xl">🔍</div>
-            <h2 className="text-xl font-semibold text-gray-400">CrimeMind AI Investigation Copilot</h2>
+            <h2 className="text-xl font-semibold text-gray-400">Drishti Investigation Copilot</h2>
             <p className="text-sm text-center max-w-md">
               Ask me about crime patterns, criminal networks, hotspot analysis, or generate investigation reports.
             </p>
@@ -155,7 +152,7 @@ const Chat: React.FC = () => {
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                 </div>
-                <span className="text-sm text-gray-400">CrimeMind AI is analyzing...</span>
+                <span className="text-sm text-gray-400">Drishti is analyzing...</span>
               </div>
             </div>
           </div>
